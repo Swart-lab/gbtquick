@@ -13,18 +13,23 @@ parser = argparse.ArgumentParser(description="""
     read-mapping, by parsing coverage info directly from headers
     """)
 parser.add_argument("-a","--assembler", type=str, 
-        help="Assembler used, valid options 'spades','flye','mapping'")
+        help="Assembler used, valid options 'spades', 'flye', 'megahit', 'mapping'")
 parser.add_argument("-f", "--fasta", type=str, 
         help="Assembly Fasta file")
 parser.add_argument("-i", "--info", type=str, 
         help="assembly_info file from Flye")
-parser.add_argument("--bam", type=str, 
+parser.add_argument("--cds", action="store_true", # TODO
+        help="Run Prodigal to predict CDS and calculate CDS density")
+parser.add_argument("--prodigal_gff", type=str,
+        help="Output GFF3 from Prodigal already computed")
+parser.add_argument("--bam", type=str,  # TODO
         help="Mapping BAM file to calculate covstats")
 parser.add_argument("-o", "--out", type=str, default="test", 
         help="Output filename prefix")
 parser.add_argument("--dump", action="store_true",
         help="Dump data as json for troubleshooting")
 args = parser.parse_args()
+
 
 def fasta_to_gccount(filename):
     """Parse Fasta file and get GC base count per contig
@@ -53,8 +58,8 @@ def fasta_to_gccount(filename):
                 # Strip anything after first whitespace
                 rname = re.match("\S+", rheader)[0] 
             else:
-                gccount[rname] += sum([line.count(char) for char in ["g","c","G","C"]])
-                # TODO ambiguous IUPAC code for G/C
+                gccount[rname] += sum([line.count(char) 
+                    for char in ["g", "c", "G", "C", "S"]])
     return(gccount)
 
 
@@ -79,10 +84,48 @@ def parse_spades_assembly(assem):
             if re.match(r"^>", line):
                 line = line.rstrip()
                 rname = line[1:] # Strip > character from head
-                rcap = re.match(r"NODE_(\d+)_length_(\d+)_cov_([\d.])", rname)
+                rcap = re.match(r"NODE_(\d+)_length_(\d+)_cov_([\d.]+)", rname)
                 if rcap:
-                    covstats[rname]["Length"] = rcap.group(2)
-                    covstats[rname]["Avg_fold"] = rcap.group(3)
+                    covstats[rname]["Length"] = int(rcap.group(2))
+                    covstats[rname]["Avg_fold"] = float(rcap.group(3))
+                else:
+                    logging.warn(f"Invalid SPAdes header format {rname}")
+    logging.info(f"Parsing SPAdes scaffolds assembly file {assem} for GC content")
+    gccount = fasta_to_gccount(assem)
+    # Divide raw GC count by contig length to get GC frac
+    for rname in covstats:
+        if gccount[rname]:
+            covstats[rname]["Ref_GC"] = float(gccount[rname] / covstats[rname]["Length"])
+        else:
+            covstats[rname]["Ref_GC"] = 0.0
+    return(covstats)
+
+
+def parse_megahit_assembly(assem):
+    """Parse Megahit assembly, get coverage from header and report covstats
+
+    Parameters
+    ----------
+    assem : str
+        Path to Megahit contigs.fa file
+    
+    Returns
+    -------
+    dict
+        dict of dicts, keyed by str (statistic type), each dict contains stats
+        values keyed by str (contig name)
+    """
+    covstats = defaultdict(dict)
+    logging.info(f"Parsing Megahit contig assembly file {assem}")
+    with open(assem) as fh:
+        for line in fh:
+            if re.match(r"^>", line):
+                line = line.rstrip()
+                rcap = re.match(r"(\w+) flag=(\S+) multi=([\d.]+) len=(\d+)", rname)
+                if rcap:
+                    rname = rcap.group(1) # contig name until first whitespace
+                    covstats[rname]["Avg_fold"] = float(rcap.group(3))
+                    covstats[rname]["Length"] = int(rcap.group(4))
                 else:
                     logging.warn(f"Invalid SPAdes header format {rname}")
     logging.info(f"Parsing SPAdes scaffolds assembly file {assem} for GC content")
@@ -135,6 +178,12 @@ def parse_flye_assembly(info, assem):
     return(covstats)
 
 
+# TODO covstats from BAM file with samtools covstats (samtools>=1.10)
+
+
+# TODO run prodigal and parse output for CDS density
+
+
 def covstats_to_tsv(d, filename):
     """Convert covstats dict to TSV format
 
@@ -176,6 +225,9 @@ if args.assembler == "flye":
 elif args.assembler == "spades":
     logging.log(f"Parsing SPAdes assembly file {args.fasta}")
     covstats = parse_spades_assembly(args.fasta)
+elif args.assembler == "megahit":
+    logging.log(f"Parsing Megahit assembly file {args.fasta}")
+    covstats = parse_megahit_assembly(args.fasta)
 else:
     logging.warn(f"Invalid assembler {args.assembler} specified")
 
