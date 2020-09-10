@@ -22,6 +22,8 @@ parser.add_argument("--bam", type=str,
         help="Mapping BAM file to calculate covstats")
 parser.add_argument("-o", "--out", type=str, default="test", 
         help="Output filename prefix")
+parser.add_argument("--dump", action="store_true",
+        help="Dump data as json for troubleshooting")
 args = parser.parse_args()
 
 def fasta_to_gccount(filename):
@@ -79,18 +81,18 @@ def parse_spades_assembly(assem):
                 rname = line[1:] # Strip > character from head
                 rcap = re.match(r"NODE_(\d+)_length_(\d+)_cov_([\d.])", rname)
                 if rcap:
-                    covstats["Length"][rname] = rcap.group(2)
-                    covstats["Avg_fold"][rname] = rcap.group(3)
+                    covstats[rname]["Length"] = rcap.group(2)
+                    covstats[rname]["Avg_fold"] = rcap.group(3)
                 else:
                     logging.warn(f"Invalid SPAdes header format {rname}")
     logging.info(f"Parsing SPAdes scaffolds assembly file {assem} for GC content")
     gccount = fasta_to_gccount(assem)
     # Divide raw GC count by contig length to get GC frac
-    for rname in covstats["Length"]:
+    for rname in covstats:
         if gccount[rname]:
-            covstats["Ref_GC"][rname] = float(gccount[rname] / covstats["Length"][rname])
+            covstats[rname]["Ref_GC"] = float(gccount[rname] / covstats[rname]["Length"])
         else:
-            covstats["Ref_GC"][rname] = 0.0
+            covstats[rname]["Ref_GC"] = 0.0
     return(covstats)
 
 
@@ -118,19 +120,52 @@ def parse_flye_assembly(info, assem):
                 splitline = line.split(sep="\t")
                 # seqname length cov circ repeat mult alt_group graph_path
                 rname = splitline[0]
-                covstats["Length"][rname] = int(splitline[1])
-                covstats["Avg_fold"][rname] = float(splitline[2])
-                covstats["Circular"][rname] = str(splitline[3])
-                covstats["Repeat"][rname] = str(splitline[4])
+                covstats[rname]["Length"] = int(splitline[1])
+                covstats[rname]["Avg_fold"] = float(splitline[2])
+                covstats[rname]["Circular"] = str(splitline[3])
+                covstats[rname]["Repeat"] = str(splitline[4])
     logging.info(f"Parsing Flye assembly Fasta file {assem} for GC content")
     gccount = fasta_to_gccount(assem)
     # Divide raw GC count by contig length to get GC frac
-    for rname in covstats["Length"]:
+    for rname in covstats:
         if gccount[rname]:
-            covstats["Ref_GC"][rname] = float(gccount[rname] / covstats["Length"][rname])
+            covstats[rname]["Ref_GC"] = float(gccount[rname] / covstats[rname]["Length"])
         else:
-            covstats["Ref_GC"][rname] = 0.0
+            covstats[rname]["Ref_GC"] = 0.0
     return(covstats)
+
+
+def covstats_to_tsv(d, filename):
+    """Convert covstats dict to TSV format
+
+    Headers for all columns will be written
+    """
+    # scaffold Length Avg_fold Ref_GC Circular Repeat Cds_dens
+    headings = ["Length", "Avg_fold", "Ref_GC", "Circular", "Repeat", "CDS_dens"]
+    out = []
+    heading_counter = defaultdict(int)
+    for scaffold in d:
+        outl = [scaffold]
+        for heading in headings:
+            if heading in d[scaffold]:
+                heading_counter[heading] += 1
+                outl.append(str(d[scaffold][heading]))
+        out.append(outl)
+    # Sanity check
+    for heading in heading_counter:
+        if heading_counter[heading] != len(d):
+            logging.warn("Data lengths do not match number of scaffolds")
+    # Write header
+    header = ["Scaffold"]
+    for heading in headings:
+        if heading in heading_counter:
+            header.append(heading)
+    # Write file
+    with open(filename, "w") as fh:
+        fh.write("\t".join(header) + "\n")
+        for line in out:
+            fh.write("\t".join(line) + "\n")
+
 
 # main
 
@@ -138,12 +173,15 @@ if args.assembler == "flye":
     if not args.info:
         logging.warn("Flye assembly_info file not specified")
     covstats = parse_flye_assembly(args.info, args.fasta)
-    with open("test.json","w") as fh:
-        json.dump(covstats, fh, indent=4)
 elif args.assembler == "spades":
     logging.log(f"Parsing SPAdes assembly file {args.fasta}")
     covstats = parse_spades_assembly(args.fasta)
-    with open("test.json","w") as fh:
-        json.dump(covstats, fh, indent=4)
 else:
     logging.warn(f"Invalid assembler {args.assembler} specified")
+
+if args.dump:
+    logging.info("Dumping data to {args.out}.dump.json for troubleshooting")
+    with open(f"{args.out}.dump.json","w") as fh:
+        json.dump(covstats, fh, indent=4)
+if covstats:
+    covstats_to_tsv(covstats,f"{args.out}.covstats.tsv")
