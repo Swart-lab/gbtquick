@@ -55,6 +55,45 @@ def fasta_to_gccount(filename):
                 # TODO ambiguous IUPAC code for G/C
     return(gccount)
 
+
+def parse_spades_assembly(assem):
+    """Parse SPAdes assembly, get coverage from header and report covstats
+
+    Parameters
+    ----------
+    assem : str
+        Path to SPAdes scaffolds.fasta file
+    
+    Returns
+    -------
+    dict
+        dict of dicts, keyed by str (statistic type), each dict contains stats
+        values keyed by str (contig name)
+    """
+    covstats = {}
+    logging.info(f"Parsing SPAdes scaffolds assembly file {assem}")
+    with open(assem) as fh:
+        for line in fh:
+            if re.match(r"^>", line):
+                line = line.rstrip()
+                rname = line[1:] # Strip > character from head
+                rcap = re.match(r"NODE_(\d+)_length_(\d+)_cov_([\d.])", rname)
+                if rcap:
+                    covstats["Length"][rname] = rcap.group(2)
+                    covstats["Avg_fold"][rname] = rcap.group(3)
+                else:
+                    logging.warn(f"Invalid SPAdes header format {rname}")
+    logging.info(f"Parsing SPAdes scaffolds assembly file {assem} for GC content")
+    gccount = fasta_to_gccount(filename)
+    # Divide raw GC count by contig length to get GC frac
+    for rname in covstats["Length"]:
+        if gccount[rname]:
+            covstats["Ref_GC"][rname] = float(gccount[rname] / covstats["Length"][rname])
+        else:
+            covstats["Ref_GC"][rname] = 0.0
+    return(covstats)
+
+
 def parse_flye_assembly(info, assem):
     """Parse Flye assembly, get coverage from header and report covstats
 
@@ -96,13 +135,15 @@ def parse_flye_assembly(info, assem):
 # main
 
 if args.assembler == "flye":
-    # do flye things
     if not args.info:
         logging.warn("Flye assembly_info file not specified")
     covstats = parse_flye_assembly(args.info, args.fasta)
-
+    with open("test.json","w") as fh:
+        json.dump(covstats, fh, indent=4)
 elif args.assembler == "spades":
-    # do spades things
     logging.log(f"Parsing SPAdes assembly file {args.fasta}")
+    covstats = parse_spades_assembly(args.fasta)
+    with open("test.json","w") as fh:
+        json.dump(covstats, fh, indent=4)
 else:
     logging.warn(f"Invalid assembler {args.assembler} specified")
