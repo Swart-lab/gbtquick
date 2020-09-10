@@ -38,7 +38,7 @@ def fasta_to_gccount(filename):
         dict of ints (GC base counts) per contig, keyed by str (contig name)
     """
     # counter = 0
-    gccount = {}
+    gccount = defaultdict(int)
     with open(filename, "r") as fh:
         rname = ""
         for line in fh:
@@ -70,7 +70,7 @@ def parse_spades_assembly(assem):
         dict of dicts, keyed by str (statistic type), each dict contains stats
         values keyed by str (contig name)
     """
-    covstats = {}
+    covstats = defaultdict(dict)
     logging.info(f"Parsing SPAdes scaffolds assembly file {assem}")
     with open(assem) as fh:
         for line in fh:
@@ -84,7 +84,7 @@ def parse_spades_assembly(assem):
                 else:
                     logging.warn(f"Invalid SPAdes header format {rname}")
     logging.info(f"Parsing SPAdes scaffolds assembly file {assem} for GC content")
-    gccount = fasta_to_gccount(filename)
+    gccount = fasta_to_gccount(assem)
     # Divide raw GC count by contig length to get GC frac
     for rname in covstats["Length"]:
         if gccount[rname]:
@@ -110,7 +110,7 @@ def parse_flye_assembly(info, assem):
         dict of dicts, keyed by str (statistic type), each dict contains stats
         values keyed by str (contig name)
     """
-    covstats = {}
+    covstats = defaultdict(dict)
     logging.info(f"Parsing Flye assembly_info file {info}")
     with open(info) as fh:
         for line in fh:
@@ -118,12 +118,12 @@ def parse_flye_assembly(info, assem):
                 splitline = line.split(sep="\t")
                 # seqname length cov circ repeat mult alt_group graph_path
                 rname = splitline[0]
-                covstats["Length"][rname] = float(splitline[1])
+                covstats["Length"][rname] = int(splitline[1])
                 covstats["Avg_fold"][rname] = float(splitline[2])
                 covstats["Circular"][rname] = str(splitline[3])
                 covstats["Repeat"][rname] = str(splitline[4])
     logging.info(f"Parsing Flye assembly Fasta file {assem} for GC content")
-    gccount = fasta_to_gccount(filename)
+    gccount = fasta_to_gccount(assem)
     # Divide raw GC count by contig length to get GC frac
     for rname in covstats["Length"]:
         if gccount[rname]:
