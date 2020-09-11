@@ -21,14 +21,11 @@ parser.add_argument("-f", "--fasta", type=str,
 parser.add_argument("-i", "--info", type=str, 
         help="assembly_info file from Flye")
 # Prodigal params
-parser.add_argument("--cds", action="store_true", # TODO
+parser.add_argument("--cds", action="store_true",
         help="Run Prodigal to predict CDS and calculate CDS density")
 parser.add_argument("--prodigal_gff", type=str, default=None,
         help="Output GFF3 from Prodigal already computed")
-# Mapping
-parser.add_argument("--bam", type=str,  # TODO
-        help="Mapping BAM file to calculate covstats")
-# Plot outputs TODO 
+# Plot outputs
 parser.add_argument("--plot", action="store_true",
         help="Plot figure of blobplot")
 parser.add_argument("--plot_fmt", type=str, default="png",
@@ -193,12 +190,15 @@ def parse_flye_assembly(info, assem):
     return(covstats)
 
 
-# TODO covstats from BAM file with samtools covstats (samtools>=1.10)
-
-
-# TODO run prodigal and parse output for CDS density
 def run_prodigal(fasta, filename):
     """Run Prodigal to predict CDS
+
+    Parameters
+    ----------
+    fasta : str
+        Path to Fasta file of genome assembly
+    filename : str
+        Path to write Prodigal GFF file
     """
     import os
     # retval = subprocess.run(["prodigal", "-q -f gff", "-i", fasta, "-o", filename])
