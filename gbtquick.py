@@ -255,6 +255,59 @@ def covstats_to_tsv(d, filename):
             fh.write("\t".join(line) + "\n")
 
 
+def covstats_to_plot(covstats, filename, fmt, name=None,
+        width=10, height=7, color_field=None):
+    """Produce blobplot from covstats
+
+    Parameters
+    ----------
+    covstats : dict
+        Covstats dict produced by parse_.._assembly
+    color_field : str
+        Field to use for color of plot characters
+    filename : str
+        Path to write file
+    fmt : str
+        Image format, either 'pdf' or 'png'
+    name : str
+        Name of library to be included in plot title
+    width : int
+        Width of plot in inches
+    height : int
+        Height of plot in inches
+    """
+    lens = [covstats[contig]["Length"] for contig in covstats]
+    covs = [covstats[contig]["Avg_fold"] for contig in covstats]
+    gcs = [covstats[contig]["Ref_GC"] for contig in covstats]
+    if color_field:
+        try:
+            cols = [covstats[contig][color_field] for contig in covstats]
+        except:
+            logging.warn(f"Field {color_field} not found in statistics")
+    # Scaling factor for plot points
+    scale_factor = max(lens) / (width * plt.rcParams["figure.dpi"])
+    fig, ax = plt.subplots(figsize=(width, height))
+    if color_field:
+        scatter = ax.scatter(x=gcs, y=covs,
+                s=[i/scale_factor for i in lens],
+                c=cols,
+                alpha=0.3)
+        fig.colorbar(scatter, label=color_field)
+    else:
+        scatter = ax.scatter(x=gcs, y=covs,
+                s=[i/scale_factor for i in lens],
+                alpha=0.3)
+    plt.yscale('log')
+    plt.xlabel("GC fraction")
+    plt.ylabel("Coverage")
+    if name:
+        plt.title(f"Blobplot for library {name}")
+    # Invert scaling factor for legend to portray correct values
+    invs = dict(prop="sizes", num=5, func=lambda s: s*scale_factor)
+    legend = ax.legend(*scatter.legend_elements(**invs, alpha=0.2))
+    plt.savefig(filename, format=fmt)
+
+
 # main
 
 if args.assembler == "flye":
@@ -278,6 +331,19 @@ if args.prodigal_gff:
             covstats[contig]["CDS_dens"] = float(cdslengths[contig] / covstats[contig]["Length"])
         else:
             covstats[contig]["CDS_dens"] = 0.0
+
+if args.plot:
+    logging.info(f"Drawing blobplot to file {args.out}.blobplot.{args.plot_fmt}")
+    if args.prodigal_gff or args.cds:
+        covstats_to_plot(covstats, f"{args.out}.blobplot.{args.plot_fmt}", 
+                fmt=args.plot_fmt, width=args.plot_width,
+                height=args.plot_height, color_field="CDS_dens",
+                name=args.out)
+    else:
+        covstats_to_plot(covstats, f"{args.out}.blobplot.{args.plot_fmt}", 
+                fmt=args.plot_fmt, width=args.plot_width, 
+                height=args.plot_height,
+                name=args.out)
 
 if args.dump:
     logging.info("Dumping data to {args.out}.dump.json for troubleshooting")
