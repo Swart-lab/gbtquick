@@ -44,6 +44,7 @@ parser.add_argument("--dump", action="store_true",
         help="Dump data as json for troubleshooting")
 args = parser.parse_args()
 
+logging.basicConfig(format='[%(asctime)s] %(message)s', level=logging.INFO)
 
 def fasta_to_gccount(filename):
     """Parse Fasta file and get GC base count per contig
@@ -196,6 +197,15 @@ def parse_flye_assembly(info, assem):
 
 
 # TODO run prodigal and parse output for CDS density
+def run_prodigal(fasta, filename):
+    """Run Prodigal to predict CDS
+    """
+    import os
+    # retval = subprocess.run(["prodigal", "-q -f gff", "-i", fasta, "-o", filename])
+    retval = os.system(f"prodigal -i {fasta} -f gff -o {filename} -q")
+    if retval != 0:
+        logging.warning("Prodigal did not terminate successfully")
+    return(retval)
 
 
 def parse_prodigal_gff(filename):
@@ -323,6 +333,14 @@ elif args.assembler == "megahit":
     covstats = parse_megahit_assembly(args.fasta)
 else:
     logging.warn(f"Invalid assembler {args.assembler} specified")
+
+if args.cds:
+    if args.prodigal_gff:
+        logging.info(f"Prodigal output already supplied, skipping Prodigal")
+    else:
+        logging.info(f"Running Prodigal to predict CDSs")
+        args.prodigal_gff = f"{args.out}.prodigal.gff"
+        run_prodigal(args.fasta, args.prodigal_gff)
 
 if args.prodigal_gff:
     logging.info(f"Calculating CDS density from Prodigal output {args.prodigal_gff}")
