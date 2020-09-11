@@ -5,6 +5,7 @@ import re
 import argparse
 import logging
 import json
+import matplotlib.pyplot as plt
 from collections import defaultdict
 from statistics import mean,stdev,median
 
@@ -12,18 +13,31 @@ parser = argparse.ArgumentParser(description="""
     Report covstats and plot blobplots from (meta)genome assembly files without
     read-mapping, by parsing coverage info directly from headers
     """)
+# Basic inputs
 parser.add_argument("-a","--assembler", type=str, 
         help="Assembler used, valid options 'spades', 'flye', 'megahit', 'mapping'")
 parser.add_argument("-f", "--fasta", type=str, 
         help="Assembly Fasta file")
 parser.add_argument("-i", "--info", type=str, 
         help="assembly_info file from Flye")
+# Prodigal params
 parser.add_argument("--cds", action="store_true", # TODO
         help="Run Prodigal to predict CDS and calculate CDS density")
-parser.add_argument("--prodigal_gff", type=str,
+parser.add_argument("--prodigal_gff", type=str, default=None,
         help="Output GFF3 from Prodigal already computed")
+# Mapping
 parser.add_argument("--bam", type=str,  # TODO
         help="Mapping BAM file to calculate covstats")
+# Plot outputs TODO 
+parser.add_argument("--plot", action="store_true",
+        help="Plot figure of blobplot")
+parser.add_argument("--plot_fmt", type=str, default="png",
+        help="Format of plot image, either png or pdf")
+parser.add_argument("--plot_width", type=int, default=10,
+        help="Width of plot, in inches")
+parser.add_argument("--plot_height", type=int, default=7,
+        help="Height of plot, in inches")
+# Output params
 parser.add_argument("-o", "--out", type=str, default="test", 
         help="Output filename prefix")
 parser.add_argument("--dump", action="store_true",
@@ -184,6 +198,31 @@ def parse_flye_assembly(info, assem):
 # TODO run prodigal and parse output for CDS density
 
 
+def parse_prodigal_gff(filename):
+    """Parse GFF output from Prodigal and calculate CDS density per contig
+
+    Parameters
+    ----------
+    filename : str
+        Path to Prodigal GFF output file
+
+    Returns
+    -------
+    defaultdict
+        dict of total CDS lengths keyed by contig name
+    """
+    # dict of total CDS length keyed by contig name
+    cdslength = defaultdict(int)
+    with open(filename, "r") as fh:
+        for line in fh:
+            line = line.rstrip()
+            if not re.match(r"#", line):
+                fields = line.split("\t")
+                if fields[2] == "CDS":
+                    cdslength[fields[0]] += int(fields[4]) - int(fields[3])
+    return(cdslength)
+
+
 def covstats_to_tsv(d, filename):
     """Convert covstats dict to TSV format
 
@@ -230,6 +269,15 @@ elif args.assembler == "megahit":
     covstats = parse_megahit_assembly(args.fasta)
 else:
     logging.warn(f"Invalid assembler {args.assembler} specified")
+
+if args.prodigal_gff:
+    logging.info(f"Calculating CDS density from Prodigal output {args.prodigal_gff}")
+    cdslengths = parse_prodigal_gff(args.prodigal_gff)
+    for contig in covstats:
+        if contig in cdslengths:
+            covstats[contig]["CDS_dens"] = float(cdslengths[contig] / covstats[contig]["Length"])
+        else:
+            covstats[contig]["CDS_dens"] = 0.0
 
 if args.dump:
     logging.info("Dumping data to {args.out}.dump.json for troubleshooting")
