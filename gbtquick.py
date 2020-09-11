@@ -93,7 +93,7 @@ def parse_spades_assembly(assem):
     """
     covstats = defaultdict(dict)
     logging.info(f"Parsing SPAdes scaffolds assembly file {assem}")
-    with open(assem) as fh:
+    with open(assem, "r") as fh:
         for line in fh:
             if re.match(r"^>", line):
                 line = line.rstrip()
@@ -131,7 +131,7 @@ def parse_megahit_assembly(assem):
     """
     covstats = defaultdict(dict)
     logging.info(f"Parsing Megahit contig assembly file {assem}")
-    with open(assem) as fh:
+    with open(assem, "r") as fh:
         for line in fh:
             if re.match(r"^>", line):
                 line = line.rstrip()
@@ -171,7 +171,7 @@ def parse_flye_assembly(info, assem):
     """
     covstats = defaultdict(dict)
     logging.info(f"Parsing Flye assembly_info file {info}")
-    with open(info) as fh:
+    with open(info, "r") as fh:
         for line in fh:
             if not re.match(r"^#", line): # skip comments/headers
                 splitline = line.split(sep="\t")
@@ -276,12 +276,13 @@ def covstats_to_plot(covstats, filename, fmt, name=None,
     height : int
         Height of plot in inches
     """
-    lens = [covstats[contig]["Length"] for contig in covstats]
-    covs = [covstats[contig]["Avg_fold"] for contig in covstats]
-    gcs = [covstats[contig]["Ref_GC"] for contig in covstats]
+    minContigLen = 1000
+    lens = [covstats[contig]["Length"] for contig in covstats if covstats[contig]["Length"] > minContigLen]
+    covs = [covstats[contig]["Avg_fold"] for contig in covstats if covstats[contig]["Length"] > minContigLen]
+    gcs = [covstats[contig]["Ref_GC"] for contig in covstats if covstats[contig]["Length"] > minContigLen]
     if color_field:
         try:
-            cols = [covstats[contig][color_field] for contig in covstats]
+            cols = [covstats[contig][color_field] for contig in covstats if covstats[contig]["Length"] > minContigLen]
         except:
             logging.warn(f"Field {color_field} not found in statistics")
     # Scaling factor for plot points
@@ -291,13 +292,13 @@ def covstats_to_plot(covstats, filename, fmt, name=None,
         scatter = ax.scatter(x=gcs, y=covs,
                 s=[i/scale_factor for i in lens],
                 c=cols,
-                alpha=0.3)
+                alpha=0.1)
         fig.colorbar(scatter, label=color_field)
     else:
         scatter = ax.scatter(x=gcs, y=covs,
                 s=[i/scale_factor for i in lens],
-                alpha=0.3)
-    plt.yscale('log')
+                alpha=0.1)
+    plt.yscale('symlog')
     plt.xlabel("GC fraction")
     plt.ylabel("Coverage")
     if name:
@@ -315,10 +316,10 @@ if args.assembler == "flye":
         logging.warn("Flye assembly_info file not specified")
     covstats = parse_flye_assembly(args.info, args.fasta)
 elif args.assembler == "spades":
-    logging.log(f"Parsing SPAdes assembly file {args.fasta}")
+    logging.info(f"Parsing SPAdes assembly file {args.fasta}")
     covstats = parse_spades_assembly(args.fasta)
 elif args.assembler == "megahit":
-    logging.log(f"Parsing Megahit assembly file {args.fasta}")
+    logging.info(f"Parsing Megahit assembly file {args.fasta}")
     covstats = parse_megahit_assembly(args.fasta)
 else:
     logging.warn(f"Invalid assembler {args.assembler} specified")
