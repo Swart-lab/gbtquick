@@ -5,6 +5,8 @@ import re
 import argparse
 import logging
 import json
+import matplotlib as mpl
+mpl.use("Agg")  # Plot without X-server
 import matplotlib.pyplot as plt
 from collections import defaultdict
 from statistics import mean,stdev,median
