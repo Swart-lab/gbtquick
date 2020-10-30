@@ -135,6 +135,7 @@ def parse_megahit_assembly(assem):
         for line in fh:
             if re.match(r"^>", line):
                 line = line.rstrip()
+                rname = line[1:] # Strip > character from head
                 rcap = re.match(r"(\w+) flag=(\S+) multi=([\d.]+) len=(\d+)", rname)
                 if rcap:
                     rname = rcap.group(1) # contig name until first whitespace
